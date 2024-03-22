@@ -16,7 +16,7 @@ MQTT_KEEPALIVE_INTERVAL = 60
 MQTT_TOPIC = "channels/2462234/publish"
 MQTT_CLIENT_ID = "Cg45ARIZBzQvNRcJOSwNHSg"
 MQTT_USER = "Cg45ARIZBzQvNRcJOSwNHSg"
-MQTT_PWD = "wLKoY/+JcfiKiShbnKt/cj09"
+MQTT_PWD = "5HJIDRORCTLHNunC/Bgqk3lO"
 
 
 # Setup BH1750 and BMP280 and LED
@@ -27,8 +27,24 @@ bmp280 = BMP280(i2c_addr= address2, i2c_dev=bus)
 interval = 15 # Sample period in seconds
 
 pin1 = 2
+pause_time = 0.2
+led_on = False
 wiringpi.wiringPiSetup()
 wiringpi.pinMode(pin1, 1)
+
+# Set pins as a softPWM output
+wiringpi.softPwmCreate(pin1, 0, 100)
+
+# Start PWM
+wiringpi.softPwmWrite(pin1, 0)
+
+def controlLEDsOn(sig1,cnt, wait):
+	wiringpi.softPwmWrite(sig1, cnt)
+	time.sleep(wait)
+
+def controlLEDsOff(sig1,cnt, wait):
+	wiringpi.softPwmWrite(sig1, 100-cnt)
+	time.sleep(wait)
 
 def get_value(bus, address):
     write = i2c_msg.write(address, [0x10]) # 1lx resolution 120ms see datasheet
@@ -67,19 +83,19 @@ while True:
     lux = get_value(bus, address1)
     bmp280_temperature = bmp280.get_temperature()
     bmp280_pressure = bmp280.get_pressure()
-    bh1750_light = lux.get_light_intensity()
     print("{:.2f} Lux".format(lux))
     print("Temperature: %4.1f, Pressure: %4.1f" % (bmp280_temperature, bmp280_pressure))
-    if lux < 50:
-        wiringpi.digitalWrite(pin1, 1)
-    else:
-        wiringpi.digitalWrite(pin1, 0)
-    time.sleep(interval)
     # Create the JSON data structure
-    MQTT_DATA = "field1="+str(bmp280_temperature)+"&field2="+str(bmp280_pressure)+"&field3="+str(bh1750_light)+"&status=MQTTPUBLISH"
+    MQTT_DATA = "field1="+str(bmp280_temperature)+"&field2="+str(bmp280_pressure)+"&field3="+str(lux)+"&status=MQTTPUBLISH"
     print(MQTT_DATA)
     try:
         client.publish(topic=MQTT_TOPIC, payload=MQTT_DATA, qos=0, retain=False, properties=None)
         time.sleep(interval)
     except OSError:
         client.reconnect()
+
+    if lux > 50:
+          wiringpi.softPwmWrite(pin1, 0)
+    else:
+         for i in range(0,100):
+            controlLEDsOn(pin1,i,pause_time)
